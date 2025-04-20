@@ -745,6 +745,9 @@ void cthd_acpi_rel::dump_art() {
 void cthd_acpi_rel::dump_trt() {
 }
 
+void cthd_acpi_rel::dump_psvt() {
+}
+
 void cthd_acpi_rel::dump_art() {
 }
 #endif
