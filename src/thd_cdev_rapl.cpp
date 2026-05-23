@@ -108,8 +108,14 @@ int cthd_sysfs_cdev_rapl::get_curr_state() {
 // Return the current power, using this the controller can choose the next state
 int cthd_sysfs_cdev_rapl::get_curr_state(bool read_again) {
 	if (dynamic_phy_max_enable) {
+		int pl1, power;
+
 		thd_engine->rapl_power_meter.rapl_start_measure_power();
-		return thd_engine->rapl_power_meter.rapl_action_get_power(PACKAGE);
+		power = thd_engine->rapl_power_meter.rapl_action_get_power(PACKAGE);
+		pl1 = rapl_read_pl1();
+		if (pl1 != THD_ERROR && pl1 < power)
+			return pl1;
+		return power;
 	}
 	return curr_state;
 }
@@ -121,7 +127,7 @@ int cthd_sysfs_cdev_rapl::get_max_state() {
 
 int cthd_sysfs_cdev_rapl::rapl_sysfs_valid()
 {
-	std::stringstream temp_str;
+	std::ostringstream temp_str;
 	int found_long_term = 0;
 	int i;
 
@@ -169,7 +175,7 @@ int cthd_sysfs_cdev_rapl::rapl_sysfs_valid()
 
 int cthd_sysfs_cdev_rapl::rapl_read_pl1_max()
 {
-	std::stringstream temp_power_str;
+	std::ostringstream temp_power_str;
 	int current_pl1_max;
 
 	temp_power_str << "constraint_" << constraint_index << "_max_power_uw";
@@ -182,7 +188,7 @@ int cthd_sysfs_cdev_rapl::rapl_read_pl1_max()
 
 int cthd_sysfs_cdev_rapl::rapl_read_pl1()
 {
-	std::stringstream temp_power_str;
+	std::ostringstream temp_power_str;
 	int current_pl1;
 
 	temp_power_str << "constraint_" << constraint_index << "_power_limit_uw";
@@ -195,7 +201,7 @@ int cthd_sysfs_cdev_rapl::rapl_read_pl1()
 
 int cthd_sysfs_cdev_rapl::rapl_update_pl1(int pl1)
 {
-	std::stringstream temp_power_str;
+	std::ostringstream temp_power_str;
 	int ret;
 
 	temp_power_str << "constraint_" << constraint_index << "_power_limit_uw";
@@ -212,7 +218,7 @@ int cthd_sysfs_cdev_rapl::rapl_update_pl1(int pl1)
 
 int cthd_sysfs_cdev_rapl::rapl_read_pl2()
 {
-	std::stringstream temp_power_str;
+	std::ostringstream temp_power_str;
 	int current_pl2;
 
 	temp_power_str << "constraint_" << pl2_index << "_power_limit_uw";
@@ -225,7 +231,7 @@ int cthd_sysfs_cdev_rapl::rapl_read_pl2()
 
 int cthd_sysfs_cdev_rapl::rapl_update_pl2(int pl2)
 {
-	std::stringstream temp_power_str;
+	std::ostringstream temp_power_str;
 	int ret;
 
 	if (pl2_index == -1) {
@@ -246,7 +252,7 @@ int cthd_sysfs_cdev_rapl::rapl_update_pl2(int pl2)
 
 int cthd_sysfs_cdev_rapl::rapl_read_time_window()
 {
-	std::stringstream temp_time_str;
+	std::ostringstream temp_time_str;
 	int tm_window;
 
 	temp_time_str << "constraint_" << constraint_index << "_time_window_us";
@@ -259,7 +265,7 @@ int cthd_sysfs_cdev_rapl::rapl_read_time_window()
 
 int cthd_sysfs_cdev_rapl::rapl_update_time_window(int time_window)
 {
-	std::stringstream temp_time_str;
+	std::ostringstream temp_time_str;
 
 	temp_time_str << "constraint_" << constraint_index << "_time_window_us";
 
@@ -275,7 +281,7 @@ int cthd_sysfs_cdev_rapl::rapl_update_time_window(int time_window)
 
 int cthd_sysfs_cdev_rapl::rapl_update_pl2_time_window(int time_window)
 {
-	std::stringstream temp_time_str;
+	std::ostringstream temp_time_str;
 
 	temp_time_str << "constraint_" << pl2_index << "_time_window_us";
 
@@ -291,7 +297,7 @@ int cthd_sysfs_cdev_rapl::rapl_update_pl2_time_window(int time_window)
 
 int cthd_sysfs_cdev_rapl::rapl_update_enable_status(int enable)
 {
-	std::stringstream temp_str;
+	std::ostringstream temp_str;
 
 	temp_str << "enabled";
 	if (cdev_sysfs.write(temp_str.str(), enable) <= 0) {
@@ -306,7 +312,7 @@ int cthd_sysfs_cdev_rapl::rapl_update_enable_status(int enable)
 
 int cthd_sysfs_cdev_rapl::rapl_read_enable_status()
 {
-	std::stringstream temp_str;
+	std::ostringstream temp_str;
 	int enable;
 
 	temp_str << "enabled";
@@ -329,7 +335,7 @@ void cthd_sysfs_cdev_rapl::set_tcc(int tcc) {
 }
 
 void cthd_sysfs_cdev_rapl::set_adaptive_target(struct adaptive_target &target) {
-	int argument = std::stoi(target.argument, NULL);
+	int argument = std::stoi(target.argument, nullptr);
 	if (target.code == "PL1MAX") {
 		int pl1_rapl;
 
@@ -352,7 +358,8 @@ void cthd_sysfs_cdev_rapl::set_adaptive_target(struct adaptive_target &target) {
 	} else if (target.code == "PL1TimeWindow") {
 		pl0_min_window = argument * 1000;
 	} else if (target.code == "PL1PowerLimit") {
-		set_curr_state(argument * 1000, 1);
+		rapl_update_pl1(argument * 1000);
+		//set_curr_state(argument * 1000, 1);
 	} else if (target.code == "PL2PowerLimit") {
 		rapl_update_pl2(argument * 1000);
 	} else if (target.code == "TccOffset") {

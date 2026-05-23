@@ -31,6 +31,7 @@
 #include <upower.h>
 #endif
 
+#include <memory>
 #include "thd_engine.h"
 #include "thd_trt_art_reader.h"
 
@@ -39,7 +40,7 @@
         ((_t-2732 >= 0) ? (_t-2732+5)/10 : (_t-2732-5)/10);     \
 })
 
-enum adaptive_condition {
+enum adaptive_condition : uint32_t { // NOLINT(performance-enum-size)
 	Default = 0x01,
 	Orientation,
 	Proximity,
@@ -95,14 +96,15 @@ enum adaptive_condition {
 	CMPP,
 	Battery_percentage,
 	Battery_count,
-	Power_slider
+	Power_slider,
+	OS_type = 86
 };
 
-enum adaptive_comparison {
-	ADAPTIVE_EQUAL = 0x01, ADAPTIVE_LESSER_OR_EQUAL, ADAPTIVE_GREATER_OR_EQUAL,
+enum adaptive_comparison : uint8_t {
+	ADAPTIVE_EQUAL = 0x01, ADAPTIVE_LESSER_OR_EQUAL, ADAPTIVE_GREATER_OR_EQUAL, ADAPTIVE_NOT_EQUAL,
 };
 
-enum adaptive_operation {
+enum adaptive_operation : uint8_t {
 	AND = 0x01, FOR
 };
 
@@ -168,6 +170,7 @@ struct trt_entry {
 };
 
 struct itmt {
+	int version;
 	std::string name;
 	std::vector<struct itmt_entry> itmt_entries;
 };
@@ -177,6 +180,21 @@ struct trippoint {
 	std::string type_str;
 	trip_point_type_t type;
 	int temp;
+};
+
+struct vsct_entry {
+	std::string target;
+	int domain_type;
+	int coeff_type;
+	int coeff;
+	int operation;
+	int alpha;
+	int trigger_point;
+};
+
+struct vspt_entry {
+	int virtual_temp;
+	int sample_period;
 };
 
 class cthd_gddv {
@@ -197,11 +215,23 @@ private:
 #endif
 	std::string int3400_base_path;
 	int power_slider;
-
+	int current_target_matched;
+	/*
+	 * Length of the buffer currently being parsed by get_type/
+	 * get_uint64/get_string. Each parse_* helper assigns this from its
+	 * own `len` parameter on entry so that bounds checks in the readers
+	 * cannot walk off the end of attacker-controlled buffers.
+	 */
+	int gddv_cur_buf_len;
 	void destroy_dynamic_sources();
 	int get_type(char *object, int *offset);
 	uint64_t get_uint64(char *object, int *offset);
 	char* get_string(char *object, int *offset);
+	char* get_string_obj(char *object, int *offset);
+
+	unsigned int crc32(char const *p, unsigned int len);
+	int format_dv_filename(std::stringstream& filename);
+
 	int merge_custom(struct custom_condition *custom,
 			struct condition *condition);
 	int merge_appc(void);
@@ -211,24 +241,28 @@ private:
 	int parse_ppcc(char *name, char *ppcc, int len);
 	int parse_psvt(char *name, char *psvt, int len);
 	int parse_itmt(char *name, char *itmt, int len);
+	int parse_itmt3(char *name, char *itmt, unsigned int len);
+	int parse_vsct(char *name, char *psvt, int len);
+	int parse_vspt(char *name, char *psvt, int len);
 	int parse_trt(char *trt, int len);
 	void parse_idsp(char *name, char *idsp, int len);
 	void parse_trip_point(char *name, char *type, char *val, int len);
 	int handle_compressed_gddv(char *buf, int size);
 	int parse_gddv_key(char *buf, int size, int *end_offset);
 	int parse_gddv(char *buf, int size, int *end_offset);
-	int verify_condition(struct condition condition);
-	int compare_condition(struct condition condition, int value);
-	int compare_time(struct condition condition);
-	int evaluate_oem_condition(struct condition condition);
+	int verify_condition(const struct condition& condition);
+	int compare_condition(const struct condition& condition, int value);
+	int compare_time(const struct condition& condition);
+	int evaluate_oem_condition(const struct condition& condition);
 	int evaluate_temperature_condition(struct condition condition);
-	int evaluate_ac_condition(struct condition condition);
-	int evaluate_lid_condition(struct condition condition);
-	int evaluate_workload_condition(struct condition condition);
-	int evaluate_platform_type_condition(struct condition condition);
-	int evaluate_power_slider_condition(struct condition condition);
-	int evaluate_condition(struct condition condition);
-	int evaluate_condition_set(std::vector<struct condition> condition_set);
+	int evaluate_ac_condition(const struct condition& condition);
+	int evaluate_lid_condition(const struct condition& condition);
+	int evaluate_workload_condition(const struct condition& condition);
+	int evaluate_platform_type_condition(const struct condition& condition);
+	int evaluate_power_slider_condition(const struct condition& condition);
+	int evaluate_os_type_condition(const struct condition& condition);
+	int evaluate_condition(struct condition& condition);
+	int evaluate_condition_set(std::vector<struct condition>& condition_set);
 	void exec_fallback_target(int target);
 	void dump_apat();
 	void dump_apct();
@@ -237,16 +271,18 @@ private:
 	void dump_itmt();
 	void dump_idsps();
 	void dump_trips();
+	void dump_vsct();
+	void dump_vspt();
 #ifndef ANDROID
 	void setup_input_devices();
 #endif
-	int get_trip_temp(std::string name, trip_point_type_t type);
+	int get_trip_temp(const std::string& name, trip_point_type_t type);
 
 public:
 #ifndef ANDROID
 	cthd_gddv() :
 			upower_client(
-			NULL), power_profiles_daemon(NULL), tablet_dev(NULL), lid_dev(NULL), int3400_base_path(""), power_slider(75) {
+			nullptr), power_profiles_daemon(nullptr), tablet_dev(nullptr), lid_dev(nullptr), int3400_base_path(""), power_slider(75), current_target_matched(-1), gddv_cur_buf_len(0) {
 	}
 #else
 	cthd_gddv() :
@@ -259,18 +295,22 @@ public:
 	std::vector<std::vector<struct condition>> conditions;
 	std::vector<struct adaptive_target> targets;
 
-	ppcc_t* get_ppcc_param(std::string name);
-	int gddv_init(void);
-	size_t gddv_load(char **buf);
+	std::string vscts_name;
+	std::vector<struct vsct_entry> vscts;
+	std::vector<struct vspt_entry> vspts;
+
+	ppcc_t* get_ppcc_param(const std::string& name);
+	int gddv_init(std::string& base_path);
+	std::unique_ptr<char[]> gddv_load(size_t *size);
 	void gddv_free(void);
 	int verify_conditions();
 	int evaluate_conditions();
 	void update_power_slider();
 	int find_agressive_target();
-	struct psvt* find_psvt(std::string name);
-	struct itmt* find_itmt(std::string name);
+	struct psvt* find_psvt(const std::string& name);
+	struct itmt* find_itmt(const std::string& name);
 	struct psvt* find_def_psvt();
-	int search_idsp(std::string name);
+	int search_idsp(const std::string& name);
 
 };
 

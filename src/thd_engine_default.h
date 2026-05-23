@@ -31,13 +31,13 @@
 
 class cthd_engine_default: public cthd_engine {
 private:
-	int add_replace_cdev(cooling_dev_t *config);
+	int add_replace_cdev(const cooling_dev_t *config);
 	bool add_int340x_processor_dev(void);
 	void disable_cpu_zone(thermal_zone_t *zone_config);
 	void workaround_rapl_mmio_power(void);
 	void workaround_tcc_offset(void);
 
-	cthd_cpu_default_binding def_binding;
+	//cthd_cpu_default_binding def_binding;
 	int workaround_interval;
 #ifndef ANDROID
 	int tcc_offset_checked;
@@ -47,14 +47,15 @@ private:
 protected:
 	bool force_mmio_rapl;
 public:
-	static const int power_clamp_reduction_percent = 5;
+	static constexpr int power_clamp_reduction_percent = 5;
+	static constexpr int processor_thermal_min_passive = 90000;
+
 	cthd_gddv gddv;
 
 #ifndef ANDROID
 	cthd_engine_default() :
-			cthd_engine("42A441D6-AE6A-462b-A84B-4A8CE79027D3"),
-			workaround_interval(0), tcc_offset_checked(0),
-			tcc_offset_low(0), force_mmio_rapl(false) {
+			cthd_engine_default("42A441D6-AE6A-462b-A84B-4A8CE79027D3")
+	{
 	}
 	cthd_engine_default(std::string _uuid) :
 			cthd_engine(std::move(_uuid)),
@@ -63,8 +64,8 @@ public:
 	}
 #else
 	cthd_engine_default() :
-			cthd_engine("42A441D6-AE6A-462b-A84B-4A8CE79027D3"),
-			workaround_interval(0), force_mmio_rapl(false) {
+			cthd_engine_default("42A441D6-AE6A-462b-A84B-4A8CE79027D3")
+	{
 	}
 	cthd_engine_default(std::string _uuid) :
 			cthd_engine(_uuid),
@@ -72,11 +73,11 @@ public:
 	}
 
 #endif
-	~cthd_engine_default();
-	int read_thermal_zones();
-	int read_cooling_devices();
-	int read_thermal_sensors();
-	void workarounds();
+	~cthd_engine_default() override;
+	int read_thermal_zones() override;
+	int read_cooling_devices() override;
+	int read_thermal_sensors() override;
+	void workarounds() override;
 };
 
 int thd_engine_create_default_engine(bool ignore_cpuid_check,

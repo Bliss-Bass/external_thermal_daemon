@@ -43,6 +43,12 @@ private:
 public:
 	cthd_pid();
 	double kp, ki, kd;
+	cthd_pid(const cthd_pid& x) = default;
+	
+	~cthd_pid() { }
+
+	cthd_pid& operator=(const cthd_pid& x) = default;
+	
 	void set_pid_param(double _kp, double _ki, double _kd)
 	{
 		kp = _kp;
@@ -55,5 +61,5 @@ public:
 	}
 	void reset() {
 		err_sum = last_err = last_time = 0;
-	}
+	}	
 };

@@ -69,11 +69,14 @@ int cthd_zone_generic::read_trip_points() {
 						trip_pt_config.cdev_trips[j].influence,
 						trip_pt_config.cdev_trips[j].sampling_period,
 						trip_pt_config.cdev_trips[j].target_state_valid,
-						trip_pt_config.cdev_trips[j].target_state);
+						trip_pt_config.cdev_trips[j].target_state, nullptr,
+						trip_pt_config.cdev_trips[j].min_max_valid,
+						trip_pt_config.cdev_trips[j].target_min_state,
+						trip_pt_config.cdev_trips[j].target_max_state);
 				zone_cdev_set_binded();
 			}
 		}
-		trip_points.push_back(trip_pt);
+		trip_points.push_back(std::move(trip_pt));
 		++trip_point_cnt;
 	}
 
@@ -98,7 +101,7 @@ int cthd_zone_generic::zone_bind_sensors() {
 
 	if (!zone_config)
 		return THD_ERROR;
-	sensor = NULL;
+	sensor = nullptr;
 	for (unsigned int i = 0; i < zone_config->trip_pts.size(); ++i) {
 		trip_point_t &trip_pt_config = zone_config->trip_pts[i];
 		sensor = thd_engine->search_sensor(trip_pt_config.sensor_type);

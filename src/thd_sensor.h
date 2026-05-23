@@ -28,6 +28,7 @@
 #include <vector>
 #include "thd_common.h"
 #include "thd_sys_fs.h"
+#include "thd_util.h"
 
 #define SENSOR_TYPE_THERMAL_SYSFS	0
 #define SENSOR_TYPE_RAW				1
@@ -54,11 +55,11 @@ public:
 	virtual ~cthd_sensor() {
 	}
 	int sensor_update();
-	virtual std::string get_sensor_type() {
+	virtual const std::string& get_sensor_type() {
 		return type_str;
 	}
 
-	virtual std::string get_sensor_path() {
+	virtual const std::string& get_sensor_path() {
 		return sensor_sysfs.get_base_path();
 	}
 
@@ -69,6 +70,10 @@ public:
 	int set_threshold(int index, int temp);
 	;
 	void update_path(std::string str) {
+		if (!starts_with(str, "/sys/")) {
+			thd_log_debug("Invalid path %s\n", str.c_str());
+			return;
+		}
 		sensor_sysfs.update_path(std::move(str));
 	}
 	void set_async_capable(bool capable) {
@@ -82,7 +87,7 @@ public:
 	}
 	virtual void sensor_dump() {
 		thd_log_info("sensor index:%d %s %s Async:%d\n", index,
-				type_str.c_str(), sensor_sysfs.get_base_path(), async_capable);
+				type_str.c_str(), sensor_sysfs.get_base_path().c_str(), async_capable);
 	}
 	// Even if sensors are capable of async, it is possible that it is not reliable enough
 	// at critical monitoring point. Sensors can be forced to go to poll mode at that temp

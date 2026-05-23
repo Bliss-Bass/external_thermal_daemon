@@ -29,17 +29,19 @@
 #include <linux/input.h>
 #include <sys/types.h>
 #include "thd_engine_adaptive.h"
+#include "thd_sensor_rapl_power.h"
+#include "thd_zone_dynamic.h"
 
 int cthd_engine_adaptive::install_passive(struct psv *psv) {
 	std::string psv_zone;
 
-	size_t pos = psv->target.find_last_of(".");
+	size_t pos = psv->target.find_last_of('.');
 	if (pos == std::string::npos)
 		psv_zone = psv->target;
 	else
 		psv_zone = psv->target.substr(pos + 1);
 
-	while (psv_zone.back() == '_') {
+	while (!psv_zone.empty() && psv_zone.back() == '_') {
 		psv_zone.pop_back();
 	}
 
@@ -64,13 +66,13 @@ int cthd_engine_adaptive::install_passive(struct psv *psv) {
 	}
 
 	std::string psv_cdev;
-	pos = psv->source.find_last_of(".");
+	pos = psv->source.find_last_of('.');
 	if (pos == std::string::npos)
 		psv_cdev = psv->source;
 	else
 		psv_cdev = psv->source.substr(pos + 1);
 
-	while (psv_cdev.back() == '_') {
+	while (!psv_cdev.empty() && psv_cdev.back() == '_') {
 		psv_cdev.pop_back();
 	}
 
@@ -114,7 +116,7 @@ int cthd_engine_adaptive::install_passive(struct psv *psv) {
 			zone->get_zone_index(), sensor->get_index(), SEQUENTIAL);
 	trip_pt.thd_trip_point_add_cdev(*cdev, cthd_trip_point::default_influence,
 			psv->sample_period / 10, target_state ? 1 : 0, target_state,
-			NULL, 0, 0, 0);
+			nullptr, 0, 0, 0);
 	zone->add_trip(trip_pt, 1);
 	zone->zone_cdev_set_binded();
 	zone->set_zone_active();
@@ -122,19 +124,19 @@ int cthd_engine_adaptive::install_passive(struct psv *psv) {
 	return 0;
 }
 
-void cthd_engine_adaptive::set_trip(std::string target, std::string argument) {
+void cthd_engine_adaptive::set_trip(const std::string& target, const std::string& argument) {
 	std::string psv_zone;
-	float float_temp = stof(argument, NULL);
+	float float_temp = stof(argument, nullptr);
 	int temp = (int) (float_temp * 1000);
 
-	size_t pos = target.find_last_of(".");
+	size_t pos = target.find_last_of('.');
 
 	if (pos == std::string::npos)
 		psv_zone = target;
 	else
 		psv_zone = target.substr(pos + 1);
 
-	while (psv_zone.back() == '_') {
+	while (!psv_zone.empty() && psv_zone.back() == '_') {
 		psv_zone.pop_back();
 	}
 
@@ -146,7 +148,7 @@ void cthd_engine_adaptive::set_trip(std::string target, std::string argument) {
 
 	int index = 0;
 	cthd_trip_point *trip = zone->get_trip_at_index(index);
-	while (trip != NULL) {
+	while (trip != nullptr) {
 		if (trip->get_trip_type() == PASSIVE) {
 			trip->update_trip_temp(temp);
 			return;
@@ -164,7 +166,7 @@ void cthd_engine_adaptive::psvt_consolidate() {
 	 * If there is a next trip after MAX for a target, then choose a temperature limit in the middle
 	 */
 	for (unsigned int i = 0; i < zones.size(); ++i) {
-		cthd_zone *zone = zones[i];
+		cthd_zone *zone = zones[i].get();
 		unsigned int count = zone->get_trip_count();
 
 		// Special case for handling a single trip which has a defined
@@ -249,13 +251,13 @@ void cthd_engine_adaptive::psvt_consolidate() {
 int cthd_engine_adaptive::install_itmt(struct itmt_entry *itmt_entry) {
 	std::string itmt_zone;
 
-	size_t pos = itmt_entry->target.find_last_of(".");
+	size_t pos = itmt_entry->target.find_last_of('.');
 	if (pos == std::string::npos)
 		itmt_zone = itmt_entry->target;
 	else
 		itmt_zone = itmt_entry->target.substr(pos + 1);
 
-	while (itmt_zone.back() == '_') {
+	while (!itmt_zone.empty() && itmt_zone.back() == '_') {
 		itmt_zone.pop_back();
 	}
 
@@ -318,7 +320,7 @@ int cthd_engine_adaptive::install_itmt(struct itmt_entry *itmt_entry) {
 		}
 	}
 
-	cthd_trip_point trip_pt(zone->get_trip_count(), PASSIVE, temp, 0,
+	cthd_trip_point trip_pt(zone->get_trip_count(), PASSIVE, temp, itmt_hyst,
 			zone->get_zone_index(), sensor->get_index(), SEQUENTIAL);
 
 	/*
@@ -341,7 +343,7 @@ int cthd_engine_adaptive::install_itmt(struct itmt_entry *itmt_entry) {
 	 */
 	trip_pt.thd_trip_point_add_cdev(*cdev, cthd_trip_point::default_influence,
 	DEFAULT_SAMPLE_TIME_SEC, 0, 0,
-	NULL, 1, _max_state, _min_state);
+	nullptr, 1, _max_state, _min_state);
 
 	zone->add_trip(trip_pt, 1);
 	zone->zone_cdev_set_binded();
@@ -362,11 +364,13 @@ int cthd_engine_adaptive::set_itmt_target(struct adaptive_target &target) {
 
 	if (!int3400_installed) {
 		for (unsigned int i = 0; i < zones.size(); ++i) {
-			cthd_zone *_zone = zones[i];
+			cthd_zone *_zone = zones[i].get();
 
 			// This is only for debug to plot power, so keep
-			if (_zone->get_zone_type() == "rapl_pkg_power")
-				continue;
+			if (debug_mode_on()) {
+				if (_zone->get_zone_type() == "rapl_pkg_power" || _zone->get_zone_type() == "power_floor")
+					continue;
+			}
 
 			_zone->zone_reset(1);
 			_zone->trip_delete_all();
@@ -386,7 +390,7 @@ int cthd_engine_adaptive::set_itmt_target(struct adaptive_target &target) {
 
 void cthd_engine_adaptive::set_int3400_target(struct adaptive_target &target) {
 
-	if (target.code == "ITMT") {
+	if (target.code == "ITMT" || target.code == "ITMT3") {
 		if (set_itmt_target(target) == THD_SUCCESS) {
 			int3400_installed = 1;
 		}
@@ -404,10 +408,10 @@ void cthd_engine_adaptive::set_int3400_target(struct adaptive_target &target) {
 
 		if (!int3400_installed) {
 			for (unsigned int i = 0; i < zones.size(); ++i) {
-				cthd_zone *_zone = zones[i];
+				cthd_zone *_zone = zones[i].get();
 
 				// This is only for debug to plot power, so keep
-				if (_zone->get_zone_type() == "rapl_pkg_power")
+				if (_zone->get_zone_type() == "rapl_pkg_power" || _zone->get_zone_type() == "power_floor")
 					continue;
 
 				_zone->zone_reset(1);
@@ -439,7 +443,10 @@ void cthd_engine_adaptive::set_int3400_target(struct adaptive_target &target) {
 		thd_log_warn("Adaptive policy couldn't create any zones\n");
 		thd_log_warn("Possibly some sensors in the PSVT are missing\n");
 		thd_log_warn("Restart in non adaptive mode via systemd\n");
-		csys_fs sysfs("/tmp/ignore_adaptive");
+
+		std::ostringstream filename;
+		filename << TDRUNDIR << "/" << "ignore_adaptive";
+		csys_fs sysfs(filename.str().c_str());
 		sysfs.create();
 		exit(EXIT_FAILURE);
 	}
@@ -453,7 +460,7 @@ void cthd_engine_adaptive::install_passive_default() {
 	thd_log_info("IETM_D0 processed\n");
 
 	for (unsigned int i = 0; i < zones.size(); ++i) {
-		cthd_zone *_zone = zones[i];
+		cthd_zone *_zone = zones[i].get();
 		_zone->zone_reset(1);
 		_zone->trip_delete_all();
 
@@ -487,7 +494,7 @@ void cthd_engine_adaptive::execute_target(struct adaptive_target &target) {
 
 	thd_log_info("Target Name:%s\n", target.name.c_str());
 
-	size_t pos = target.participant.find_last_of(".");
+	size_t pos = target.participant.find_last_of('.');
 	if (pos == std::string::npos)
 		name = target.participant;
 	else
@@ -516,7 +523,7 @@ void cthd_engine_adaptive::execute_target(struct adaptive_target &target) {
 	}
 
 	try {
-		argument = std::stoi(target.argument, NULL);
+		argument = std::stoi(target.argument, nullptr);
 	} catch (...) {
 		thd_log_info("Invalid target target:%s %s\n", target.code.c_str(),
 				target.argument.c_str());
@@ -588,12 +595,44 @@ void cthd_engine_adaptive::update_engine_state() {
 	}
 }
 
+int cthd_engine_adaptive::set_int3400_base_path()
+{
+	const char *base_path = "/sys/bus/platform/drivers/int3400 thermal";
+	csys_fs sysfs ("");
+
+	if (sysfs.exists (base_path)) {
+		DIR *dir;
+		struct dirent *entry;
+
+		if ((dir = opendir (base_path)) != nullptr) {
+			while ((entry = readdir (dir)) != nullptr) {
+				if (!strncmp (entry->d_name, "INT", strlen ("INT"))) {
+					int3400_base_path = "/sys/bus/platform/devices/";
+					int3400_base_path += entry->d_name;
+					int3400_base_path += "/";
+					thd_log_debug ("Discovered int3400 path:%s\n", int3400_base_path.c_str ());
+					closedir(dir);
+					return THD_SUCCESS;
+				}
+			}
+			closedir(dir);
+		}
+	}
+
+	return THD_ERROR;
+}
+
 int cthd_engine_adaptive::thd_engine_init(bool ignore_cpuid_check,
 		bool adaptive) {
 	csys_fs sysfs("");
-	char *buf;
 	size_t size;
 	int res;
+
+	if (check_acpi_platform_profile() != THD_SUCCESS) {
+			return THD_FATAL_ERROR;
+	}
+
+	thd_parse_features();
 
 	parser_disabled = true;
 	force_mmio_rapl = true;
@@ -607,26 +646,15 @@ int cthd_engine_adaptive::thd_engine_init(bool ignore_cpuid_check,
 		}
 	}
 
-	csys_fs _sysfs("/tmp/ignore_adaptive");
+	std::ostringstream filename;
+	filename << TDRUNDIR << "/" << "ignore_adaptive";
+	csys_fs _sysfs(filename.str().c_str());
 	if (_sysfs.exists()) {
 		return THD_ERROR;
 	}
 
-	if (sysfs.exists("/sys/bus/platform/devices/INT3400:00")) {
-		int3400_base_path = "/sys/bus/platform/devices/INT3400:00/";
-	} else if (sysfs.exists("/sys/bus/platform/devices/INTC1040:00")) {
-		int3400_base_path = "/sys/bus/platform/devices/INTC1040:00/";
-	} else if (sysfs.exists("/sys/bus/platform/devices/INTC1041:00")) {
-		int3400_base_path = "/sys/bus/platform/devices/INTC1041:00/";
-	} else if (sysfs.exists("/sys/bus/platform/devices/INTC10A0:00")) {
-		int3400_base_path = "/sys/bus/platform/devices/INTC10A0:00/";
-	} else if (sysfs.exists("/sys/bus/platform/devices/INTC1042:00")) {
-		int3400_base_path = "/sys/bus/platform/devices/INTC1042:00/";
-	} else if (sysfs.exists("/sys/bus/platform/devices/INTC1068:00")) {
-		int3400_base_path = "/sys/bus/platform/devices/INTC1068:00/";
-	} else {
+	if (set_int3400_base_path() != THD_SUCCESS)
 		return THD_ERROR;
-	}
 
 	if (sysfs.read(int3400_base_path + "firmware_node/path", int3400_path)
 			< 0) {
@@ -640,21 +668,18 @@ int cthd_engine_adaptive::thd_engine_init(bool ignore_cpuid_check,
 		return THD_ERROR;
 	}
 
-	buf = new char[size];
+	std::unique_ptr<char[]> buf(new char[size]);
 	if (!buf) {
 		thd_log_error("Unable to allocate memory for GDDV");
 		return THD_FATAL_ERROR;
 	}
 
-	if (sysfs.read(int3400_base_path + "data_vault", buf, size) < int(size)) {
+	if (sysfs.read(int3400_base_path + "data_vault", buf.get(), size) < int(size)) {
 		thd_log_debug("Unable to read GDDV data vault\n");
-		delete[] buf;
 		return THD_FATAL_ERROR;
 	}
 
-	delete[] buf;
-
-	res = gddv.gddv_init();
+	res = gddv.gddv_init(int3400_base_path);
 	if (res != THD_SUCCESS) {
 		return res;
 	}
@@ -676,6 +701,102 @@ int cthd_engine_adaptive::thd_engine_init(bool ignore_cpuid_check,
 	res = cthd_engine::thd_engine_init(ignore_cpuid_check, adaptive);
 	if (res != THD_SUCCESS)
 		return res;
+
+	if (gddv.vscts.size()) {
+		thd_log_info("Found virtual sensor [%s]\n", gddv.vscts_name.c_str());
+
+		std::string dev_name;
+		size_t pos = gddv.vscts_name.find_last_of('.');
+		if (pos == std::string::npos) {
+			dev_name = gddv.vscts_name;
+		} else {
+			dev_name = gddv.vscts_name;
+			dev_name.resize(pos);
+		}
+
+		if (dev_name.empty()) {
+			thd_log_info("Can't parse virtual sensor name\n");
+			return THD_SUCCESS;
+		}
+
+		std::string dummy = "";
+
+		std::unique_ptr<cthd_sensor_virtual> virt_sensor(new cthd_sensor_virtual(
+			current_sensor_index, dev_name, dummy, 0, 0));
+
+		for (unsigned int i = 0; i < gddv.vspts.size(); ++i) {
+			struct polling_table_entry entry;
+
+			entry.virtual_temp = gddv.vspts[i].virtual_temp;
+			entry.sample_period = gddv.vspts[i].sample_period;
+
+			virt_sensor->update_polling_table(entry);
+		}
+
+	//	virt_sensor->enable_periodic_timer();
+
+		for (unsigned int i = 0; i < gddv.vscts.size(); ++i) {
+			std::string target_name;
+			int power_sensor = 0;
+
+			if (gddv.vscts[i].coeff_type == 1) {
+				target_name = "rapl_pkg_power";
+				if (!search_sensor(target_name)){
+					std::unique_ptr<cthd_sensor_rapl_power> rapl_power(new cthd_sensor_rapl_power(current_sensor_index));
+					if (rapl_power->sensor_update() == THD_SUCCESS) {
+						sensors.push_back(std::move(rapl_power));
+						++current_sensor_index;
+					} else {
+						thd_log_info("Can't add power as virtual sensor\n");
+						return THD_SUCCESS;
+					}
+				}
+				power_sensor = 1;
+			} else {
+				size_t pos = gddv.vscts[i].target.find_last_of('.');
+				if (pos == std::string::npos)
+					target_name = gddv.vscts[i].target;
+				else
+					target_name = gddv.vscts[i].target.substr(pos + 1);
+			}
+
+			double operation;
+
+			if (gddv.vscts[i].operation)
+				operation = -1.0;
+			else
+				operation = 1.0;
+
+			virt_sensor->add_target(target_name, ((double) gddv.vscts[i].coeff) / 1000 * operation,
+						((double) gddv.vscts[i].alpha) / 1000, power_sensor);
+		}
+
+		if (virt_sensor->sensor_update() != THD_SUCCESS) {
+			thd_log_info("Can't add virtual sensor\n");
+			return THD_SUCCESS;
+		}
+
+		sensors.push_back(std::move(virt_sensor));
+		++current_sensor_index;
+
+		std::unique_ptr<cthd_zone_dynamic> zone(new cthd_zone_dynamic(current_zone_index,
+				dev_name, 0xffffffff, PASSIVE, dev_name, "intel_powerclamp"));
+		if (!zone) {
+			thd_log_info("Can't add virtual sensor\n");
+			return THD_SUCCESS;
+		}
+
+		if (zone->zone_update() != THD_SUCCESS) {
+			// sensor will be deleted when all elements of sensors are deleted from sensors[]
+			thd_log_info("Can't add virtual sensor\n");
+			return THD_SUCCESS;
+		}
+
+		zone->set_zone_active();
+		zone->zone_dump();
+		zones.push_back(std::move(zone));
+		++current_zone_index;
+	}
 
 	return THD_SUCCESS;
 }
@@ -733,7 +854,7 @@ int cthd_engine_adaptive::thd_engine_start() {
 }
 
 int thd_engine_create_adaptive_engine(bool ignore_cpuid_check, bool test_mode) {
-	thd_engine = new cthd_engine_adaptive();
+	thd_engine.reset(new cthd_engine_adaptive());
 
 	thd_engine->set_poll_interval(thd_poll_interval);
 

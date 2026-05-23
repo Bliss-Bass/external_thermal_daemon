@@ -34,19 +34,27 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 
 class csys_fs {
 private:
 	std::string base_path;
+	std::unordered_map<std::string, int> fd_cache;
+
+	int get_cached_fd(const std::string &full_path);
 
 public:
 	csys_fs() :
 			base_path("") {
 	}
-	;
-	csys_fs(const char *path) :
-			base_path(path) {
+	csys_fs(std::string path) :
+			base_path(std::move(path)) {
 	}
+	~csys_fs();
+	csys_fs(const csys_fs &) = delete;
+	csys_fs &operator=(const csys_fs &) = delete;
+	csys_fs(csys_fs &&) = delete;
+	csys_fs &operator=(csys_fs &&) = delete;
 
 	/* write data to base path (dir) + provided path */
 	int write(const std::string &path, const std::string &buf);
@@ -62,16 +70,18 @@ public:
 	int read(const std::string &path, unsigned int position, char *buf,
 			int len);
 
-	const char *get_base_path() {
-		return base_path.c_str();
+	const std::string& get_base_path() {
+		return base_path;
 	}
 	int read_symbolic_link_value(const std::string &path, char *buf, int len);
 
 	bool exists(const std::string &path);
 	bool exists();
 	size_t size(const std::string &path);
-	int create();
+	int create(int flags = (O_CREAT | O_WRONLY | O_TRUNC), mode_t mode = 0600);
 	mode_t get_mode(const std::string &path);
+
+	int check_non_symbolic_path(const std::string& path);
 
 	void update_path(std::string path) {
 		base_path = std::move(path);

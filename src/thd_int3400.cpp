@@ -31,28 +31,34 @@
 
 cthd_INT3400::cthd_INT3400(std::string _uuid) : uuid(std::move(_uuid)), base_path("") {
 	csys_fs cdev_sysfs("");
+	const char *int3400_base_path = "/sys/bus/platform/drivers/int3400 thermal";
+	csys_fs sysfs ("");
 
-	if (cdev_sysfs.exists("/sys/bus/acpi/devices/INT3400:00/physical_node/uuids")) {
-		base_path = "/sys/bus/acpi/devices/INT3400:00/physical_node/uuids/";
-	} else if (cdev_sysfs.exists("/sys/bus/acpi/devices/INTC1040:00/physical_node/uuids")) {
-		base_path = "/sys/bus/acpi/devices/INTC1040:00/physical_node/uuids/";
-	} else if (cdev_sysfs.exists("/sys/bus/acpi/devices/INTC1041:00/physical_node/uuids")) {
-		base_path = "/sys/bus/acpi/devices/INTC1041:00/physical_node/uuids/";
-	} else if (cdev_sysfs.exists("/sys/bus/acpi/devices/INTC10A0:00/physical_node/uuids")) {
-		base_path = "/sys/bus/acpi/devices/INTC10A0:00/physical_node/uuids/";
-	} else if (cdev_sysfs.exists("/sys/bus/acpi/devices/INTC1042:00/physical_node/uuids")) {
-		base_path = "/sys/bus/acpi/devices/INTC1042:00/physical_node/uuids/";
-	} else if (cdev_sysfs.exists("/sys/bus/acpi/devices/INTC1068:00/physical_node/uuids")) {
-		base_path = "/sys/bus/acpi/devices/INTC1068:00/physical_node/uuids/";
+	if (sysfs.exists (int3400_base_path)) {
+		DIR *dir;
+		struct dirent *entry;
+
+		if ((dir = opendir (int3400_base_path)) != nullptr) {
+			while ((entry = readdir (dir)) != nullptr) {
+				if (!strncmp (entry->d_name, "INT", strlen ("INT"))) {
+					base_path = "/sys/bus/platform/devices/";
+					base_path += entry->d_name;
+					base_path += "/";
+					thd_log_info("INT3400 Base path is %s\n", base_path.c_str());
+					closedir(dir);
+					return;
+				}
+			}
+			closedir(dir);
+		}
 	}
-	thd_log_info("INT3400 Base path is %s\n", base_path.c_str());
 }
 
 int cthd_INT3400::match_supported_uuid() {
 	if (base_path == "")
 		return THD_ERROR;
 
-	std::string filename = base_path + "available_uuids";
+	std::string filename = base_path + "uuids/" + "available_uuids";
 
 	std::ifstream ifs(filename.c_str(), std::ifstream::in);
 	if (ifs.good()) {
@@ -75,7 +81,7 @@ void cthd_INT3400::set_default_uuid(void) {
 	if (base_path == "")
 		return;
 
-	std::string filename = base_path + "current_uuid";
+	std::string filename = base_path + "uuids/" + "current_uuid";
 
 	std::ofstream ofs(filename.c_str(), std::ofstream::out);
 	if (ofs.good()) {
@@ -88,7 +94,7 @@ int cthd_INT3400::set_policy_osc(void) {
 	if (base_path == "")
 		return THD_ERROR;
 
-	std::string filename = base_path + "available_uuids";
+	std::string filename = base_path + "uuids/" + "available_uuids";
 
 	std::ifstream ifs(filename.c_str(), std::ifstream::in);
 	if (ifs.good()) {
@@ -96,7 +102,7 @@ int cthd_INT3400::set_policy_osc(void) {
 		if (std::getline(ifs, line)) {
 			thd_log_debug("available uuids: %s\n", line.c_str());
 			if (line == "UNKNOWN") {
-				std::string _filename = base_path + "current_uuid";
+				std::string _filename = base_path + "uuids/" + "current_uuid";
 
 				std::ofstream ofs(_filename.c_str(), std::ofstream::out);
 				if (ofs.good()) {

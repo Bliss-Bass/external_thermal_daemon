@@ -52,13 +52,15 @@ protected:
 	int install_passive(struct psv *psv);
 	int install_itmt(struct itmt_entry *itmt_entry);
 	void psvt_consolidate();
-	void set_trip(std::string device, std::string argument);
+	void set_trip(const std::string& device, const std::string& argument);
 	void set_int3400_target(struct adaptive_target &target);
 	void exec_fallback_target(int target);
 	void execute_target(struct adaptive_target &target);
 	void install_passive_default();
+	int set_int3400_base_path();
 
 public:
+	 static const int itmt_hyst = 2000;
 #ifndef ANDROID
 	cthd_engine_adaptive() :
 			cthd_engine_default("63BE270F-1C11-48FD-A6F7-3AF253FF3E2D"), policy_active(
@@ -74,20 +76,20 @@ public:
 	}
 #endif
 
-	~cthd_engine_adaptive() {
+	~cthd_engine_adaptive() override {
 	}
-	ppcc_t* get_ppcc_param(std::string name) {
-		return gddv.get_ppcc_param(std::move(name));
+	ppcc_t* get_ppcc_param(const std::string& name) override {
+		return gddv.get_ppcc_param(name);
 	}
 
-	int search_idsp(std::string name)
+	int search_idsp(const std::string& name) override
 	{
-		return gddv.search_idsp(std::move(name));
+		return gddv.search_idsp(name);
 	}
 
-	int thd_engine_init(bool ignore_cpuid_check, bool adaptive);
-	int thd_engine_start();
-	void update_engine_state();
+	int thd_engine_init(bool ignore_cpuid_check, bool adaptive) override;
+	int thd_engine_start() override;
+	void update_engine_state() override;
 	void update_power_slider();
 };
 

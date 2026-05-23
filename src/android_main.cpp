@@ -56,6 +56,7 @@ bool thd_ignore_default_control = false;
 bool workaround_enabled = false;
 bool disable_active_power = false;
 bool ignore_critical = false;
+bool power_floor_enable = false;
 
 static int pid_file_handle;
 
@@ -65,7 +66,7 @@ static void daemonShutdown() {
 		close(pid_file_handle);
 	thd_engine->thd_engine_terminate();
 	sleep(1);
-	delete thd_engine;
+	thd_engine.reset();
 }
 
 // signal handler
@@ -100,15 +101,15 @@ static void daemonize(char *rundir, char *pidfile) {
 	sigaddset(&sig_set, SIGTSTP);
 	sigaddset(&sig_set, SIGTTOU);
 	sigaddset(&sig_set, SIGTTIN);
-	sigprocmask(SIG_BLOCK, &sig_set, NULL);
+	sigprocmask(SIG_BLOCK, &sig_set, nullptr);
 
 	sig_actions.sa_handler = signal_handler;
 	sigemptyset(&sig_actions.sa_mask);
 	sig_actions.sa_flags = 0;
 
-	sigaction(SIGHUP, &sig_actions, NULL);
-	sigaction(SIGTERM, &sig_actions, NULL);
-	sigaction(SIGINT, &sig_actions, NULL);
+	sigaction(SIGHUP, &sig_actions, nullptr);
+	sigaction(SIGTERM, &sig_actions, nullptr);
+	sigaction(SIGINT, &sig_actions, nullptr);
 
 	pid = fork();
 	if (pid < 0) {
@@ -135,7 +136,13 @@ static void daemonize(char *rundir, char *pidfile) {
 	dup(i);
 	chdir(rundir);
 
-	pid_file_handle = open(pidfile, O_RDWR | O_CREAT, 0600);
+	csys_fs path(pidfile);
+	if (path.create() == -1) {
+		thd_log_info("Could not create PID lock file %s, exiting\n", pidfile);
+		exit(EXIT_FAILURE);
+	}
+
+	pid_file_handle = open(pidfile, O_RDWR);
 	if (pid_file_handle == -1) {
 		/* Couldn't open lock file */
 		thd_log_info("Could not open PID lock file %s, exiting\n", pidfile);
@@ -175,7 +182,7 @@ int main(int argc, char *argv[]) {
 	bool exclusive_control = false;
 	bool test_mode = false;
 	bool is_privileged_user = false;
-	char *conf_file = NULL;
+	char *conf_file = nullptr;
 	bool ignore_cpuid_check = false;
 	bool adaptive = false;
 	int ret;
@@ -192,7 +199,7 @@ int main(int argc, char *argv[]) {
 			{ "ignore-cpuid-check", no_argument, 0, 'i'},
 			{ "ignore-default-control", no_argument, 0, 'd'},
 			{ "adaptive", no_argument, 0, 'a'},
-			{ NULL, 0, NULL, 0 } };
+			{ nullptr, 0, nullptr, 0 } };
 
 	if (argc > 1) {
 		while ((c = getopt_long(argc, argv, short_options, long_options,
@@ -290,7 +297,7 @@ int main(int argc, char *argv[]) {
 		close(pid_file_handle);
 	thd_engine->thd_engine_terminate();
 	sleep(1);
-	delete thd_engine;
+	thd_engine.reset();
 #else
 	for (;;)
 		sleep(0xffff);

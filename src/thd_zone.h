@@ -33,6 +33,7 @@
 #include "thd_cdev.h"
 #include "thd_trip_point.h"
 #include "thd_sensor.h"
+#include "thd_sensor_virtual.h"
 
 typedef struct {
 	int zone;
@@ -44,7 +45,7 @@ typedef struct {
 // Either the are independent, means that each has own set of trip points
 // Or related. In this case one trip point. Here we take max of the sensor reading
 // and then apply trip
-typedef enum {
+typedef enum : uint8_t {
 	SENSOR_INDEPENDENT, SENSORS_CORELATED
 } sensor_relate_t;
 
@@ -68,8 +69,8 @@ protected:
 private:
 	void sort_and_update_poll_trip();
 public:
-	static const unsigned int def_async_trip_offset = 5000;
-	static const unsigned int def_async_trip_offset_pct = 10;
+	static constexpr unsigned int def_async_trip_offset = 5000;
+	static constexpr unsigned int def_async_trip_offset_pct = 10;
 
 	cthd_zone(int _index, std::string control_path, sensor_relate_t rel =
 			SENSOR_INDEPENDENT);
@@ -92,10 +93,26 @@ public:
 	void update_highest_trip_temp(cthd_trip_point &trip);
 
 	void set_zone_active() {
+		for (unsigned int i = 0; i < sensors.size(); ++i) {
+			cthd_sensor *sensor = sensors[i];
+			if (sensor->is_virtual()) {
+				cthd_sensor_virtual *_sensor = (cthd_sensor_virtual *) sensor;
+				_sensor->enable_periodic_timer();
+				break;
+			}
+		}
 		zone_active = true;
 	}
 	;
 	void set_zone_inactive() {
+		for (unsigned int i = 0; i < sensors.size(); ++i) {
+			cthd_sensor *sensor = sensors[i];
+			if (sensor->is_virtual()) {
+				cthd_sensor_virtual *_sensor = (cthd_sensor_virtual *) sensor;
+				_sensor->disable_periodic_timer();
+				break;
+			}
+		}
 		zone_active = false;
 	}
 
@@ -121,7 +138,7 @@ public:
 	}
 
 	void set_zone_type(std::string type) {
-		type_str = type;
+		type_str = std::move(type);
 	}
 
 	void bind_sensor(cthd_sensor *sensor) {
@@ -129,6 +146,7 @@ public:
 			if (sensors[i] == sensor)
 				return;
 		}
+
 		sensors.push_back(sensor);
 	}
 
@@ -155,7 +173,8 @@ public:
 
 	int bind_cooling_device(trip_point_type_t type, unsigned int trip_temp,
 			cthd_cdev *cdev, int influence, int sampling_period = 0,
-			int target_state_valid = 0, int target_state = 0);
+			int target_state_valid = 0, int target_state = 0,
+			int min_max_valid = 0, int min_state = 0, int max_state = 0);
 
 	int get_sensor_count() {
 		return sensors.size();
@@ -165,14 +184,14 @@ public:
 		if (index < sensors.size())
 			return sensors[index];
 		else
-			return NULL;
+			return nullptr;
 	}
 
 	cthd_trip_point *get_trip_at_index(unsigned int index) {
 		if (index < trip_points.size())
 			return &trip_points[index];
 		else
-			return NULL;
+			return nullptr;
 	}
 #ifdef ANDROID
 	void trip_delete_all() {

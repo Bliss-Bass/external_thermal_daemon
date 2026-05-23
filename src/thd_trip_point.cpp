@@ -34,17 +34,17 @@ int _temp, unsigned int _hyst, int _zone_id, int _sensor_id,
 		trip_control_type_t _control_type) :
 		index(_index), type(_type), temp(_temp), hyst(_hyst), control_type(
 				_control_type), zone_id(_zone_id), sensor_id(_sensor_id), trip_on(
-				false), poll_on(false), depend_cdev(NULL), depend_cdev_state(0), depend_cdev_state_rel(
+				false), poll_on(false), depend_cdev(nullptr), depend_cdev_state(0), depend_cdev_state_rel(
 				EQUAL), crit_trip_count(0) {
 	thd_log_debug("Add trip pt %d:%d:0x%x:%d:%d\n", type, zone_id, sensor_id,
 			temp, hyst);
 }
 
-void cthd_trip_point::set_dependency(std::string cdev, std::string state_str)
+void cthd_trip_point::set_dependency(const std::string& cdev, const std::string& state_str)
 {
 	cthd_cdev *cdev_ptr;
 
-	cdev_ptr = thd_engine->search_cdev(std::move(cdev));
+	cdev_ptr = thd_engine->search_cdev(cdev);
 	if (cdev_ptr) {
 		int match;
 		int state_index = 0;

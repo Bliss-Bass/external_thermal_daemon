@@ -26,6 +26,7 @@
 #include <dirent.h>
 #include <fnmatch.h>
 #include <time.h>
+#include "thd_util.h"
 
 static void *rapl_periodic_callback(void *data) {
 	cthd_rapl_power_meter *rapl_cl = (cthd_rapl_power_meter*) data;
@@ -36,7 +37,7 @@ static void *rapl_periodic_callback(void *data) {
 		sleep(rapl_cl->rapl_callback_timeout);
 	}
 
-	return NULL;
+	return nullptr;
 }
 
 cthd_rapl_power_meter::cthd_rapl_power_meter(unsigned int mask) :
@@ -48,8 +49,8 @@ cthd_rapl_power_meter::cthd_rapl_power_meter(unsigned int mask) :
 	if (rapl_sysfs.exists()) {
 		thd_log_debug("RAPL sysfs present\n");
 		rapl_present = true;
-		last_time = time(NULL);
-		rapl_read_domains(rapl_sysfs.get_base_path());
+		last_time = time(nullptr);
+		rapl_read_domains(rapl_sysfs.get_base_path().c_str());
 	} else {
 		thd_log_warn("NO RAPL sysfs present\n");
 		rapl_present = false;
@@ -64,10 +65,10 @@ void cthd_rapl_power_meter::rapl_read_domains(const char *dir_name) {
 		DIR *dir;
 		struct dirent *dir_entry;
 		thd_log_debug("RAPL base path %s\n", dir_name);
-		if ((dir = opendir(dir_name)) != NULL) {
-			while ((dir_entry = readdir(dir)) != NULL) {
+		if ((dir = opendir(dir_name)) != nullptr) {
+			while ((dir_entry = readdir(dir)) != nullptr) {
 				std::string buffer;
-				std::stringstream path;
+				std::ostringstream path;
 				int status;
 				rapl_domain_t domain;
 
@@ -81,8 +82,8 @@ void cthd_rapl_power_meter::rapl_read_domains(const char *dir_name) {
 				domain.min_power = 0;
 				domain.type = INVALID;
 
-				if (!strcmp(dir_entry->d_name, ".")
-						|| !strcmp(dir_entry->d_name, ".."))
+				if (!thd_strcmp_n(dir_entry->d_name, ".")
+						|| !thd_strcmp_n(dir_entry->d_name, ".."))
 					continue;
 				thd_log_debug("RAPL domain dir %s\n", dir_entry->d_name);
 				path << dir_name << dir_entry->d_name << "/" << "name";
@@ -96,7 +97,7 @@ void cthd_rapl_power_meter::rapl_read_domains(const char *dir_name) {
 				thd_log_debug("name %s\n", buffer.c_str());
 				if (fnmatch("package-*", buffer.c_str(), 0) == 0) {
 					domain.type = PACKAGE;
-					std::stringstream path;
+					std::ostringstream path;
 					path << dir_name << dir_entry->d_name << "/";
 					rapl_read_domains(path.str().c_str());
 				} else if (buffer == "core") {
@@ -110,14 +111,14 @@ void cthd_rapl_power_meter::rapl_read_domains(const char *dir_name) {
 					domain.name = std::move(buffer);
 					domain.path = std::string(dir_name)
 							+ std::string(dir_entry->d_name);
-					domain_list.push_back(domain);
+					domain_list.push_back(std::move(domain));
 					++count;
 				}
 			}
 			closedir(dir);
 		} else {
 			thd_log_debug("opendir failed %s :%s\n", strerror(errno),
-					rapl_sysfs.get_base_path());
+					rapl_sysfs.get_base_path().c_str());
 		}
 	}
 
@@ -141,29 +142,29 @@ bool cthd_rapl_power_meter::rapl_energy_loop() {
 	if (!enable_measurement)
 		return false;
 
-	curr_time = time(NULL);
+	curr_time = time(nullptr);
 	if ((curr_time - last_time) <= 0)
 		return true;
 	for (unsigned int i = 0; i < domain_list.size(); ++i) {
-		std::string buffer;
+		unsigned long energy_uj;
 		std::string path;
 
 		if (!domain_list[i].max_energy_range) {
 			std::string _path;
-			std::string _buffer;
+			unsigned long _value;
 			_path = domain_list[i].path + "/" + "max_energy_range_uj";
-			status = sys_fs.read(_path, _buffer);
+			status = sys_fs.read(_path, &_value);
 			if (status >= 0)
-				domain_list[i].max_energy_range = atoll(_buffer.c_str()) / 1000;
+				domain_list[i].max_energy_range = _value / 1000;
 			domain_list[i].max_energy_range_threshold =
 					domain_list[i].max_energy_range / 2;
 		}
 
 		path = domain_list[i].path + "/" + "energy_uj";
-		status = sys_fs.read(path, buffer);
+		status = sys_fs.read(path, &energy_uj);
 		if (status >= 0) {
 			counter = domain_list[i].energy_counter;
-			domain_list[i].energy_counter = atoll(buffer.c_str()) / 1000; // To milli Js
+			domain_list[i].energy_counter = energy_uj / 1000; // To milli Js
 
 			diff = 0;
 			if (domain_list[i].half_way
@@ -259,25 +260,46 @@ unsigned int cthd_rapl_power_meter::rapl_action_get_max_power(
 		if (type == domain_list[i].type) {
 			int status;
 			std::string _path;
-			std::string _buffer;
 			csys_fs sys_fs;
-			unsigned int const_0_val, const_1_val;
+			int max_power;
+			unsigned int const_0_val = 0, const_1_val = 0;
 
 			const_0_val = 0;
 			const_1_val = 0;
 			_path = domain_list[i].path + "/" + "constraint_0_max_power_uw";
-			status = sys_fs.read(_path, _buffer);
-			if (status >= 0)
-				const_0_val = atoi(_buffer.c_str());
+			status = sys_fs.read(_path, &max_power);
+			if (status >= 0) {
+				if (max_power > 0)
+					const_0_val = max_power;
+			}
 
 			_path = domain_list[i].path + "/" + "constraint_1_max_power_uw";
-			status = sys_fs.read(_path, _buffer);
-			if (status >= 0)
-				const_1_val = atoi(_buffer.c_str());
+			status = sys_fs.read(_path, &max_power);
+			if (status >= 0) {
+				if (max_power > 0)
+					const_1_val = max_power;
+			}
 
 			value = const_1_val > const_0_val ? const_1_val : const_0_val;
 			if (value)
 				return value;
+		}
+	}
+
+	return value;
+}
+
+unsigned int cthd_rapl_power_meter::rapl_action_get_last_power(domain_type type)
+{
+	unsigned int value = 0;
+
+	if (!rapl_present)
+		return 0;
+
+	for (unsigned int i = 0; i < domain_list.size(); ++i) {
+		if (type == domain_list[i].type) {
+			value = domain_list[i].power * 1000;
+			break;
 		}
 	}
 

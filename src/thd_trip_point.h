@@ -38,22 +38,23 @@
 #include <algorithm>    // std::sort
 #include <stdexcept>
 
-typedef enum {
+typedef enum : uint8_t {
 	CRITICAL, HOT, MAX, PASSIVE, ACTIVE, POLLING, INVALID_TRIP_TYPE
 } trip_point_type_t;
 
-typedef enum {
+typedef enum : uint8_t {
 	PARALLEL,  // All associated cdevs are activated together
 	SEQUENTIAL  // one after other once the previous cdev reaches its max state
 } trip_control_type_t;
 
 #define TRIP_PT_INVALID_TARGET_STATE	INT32_MAX
 
-typedef enum {
+typedef enum : uint8_t {
 	EQUAL, GREATER, LESSER, LESSER_OR_EQUAL, GREATER_OR_EQUAL
 } trip_point_cdev_depend_rel_t;
 
-typedef struct {
+class trip_pt_cdev_t{
+public:
 	cthd_cdev *cdev;
 	int influence;
 	int sampling_priod;
@@ -65,14 +66,44 @@ typedef struct {
 	int min_max_valid;
 	int min_state;
 	int max_state;
-} trip_pt_cdev_t;
+
+	trip_pt_cdev_t() {
+		cdev = nullptr;
+		influence = 0;
+		sampling_priod = 0;
+		last_op_time = 0;
+		target_state_valid = 0;
+		target_state = 0;
+		pid_param.valid = 0;
+		pid_param.kp = 0;
+		pid_param.ki = 0;
+		pid_param.kd = 0;
+		min_max_valid = 0;
+		min_state = 0;
+		max_state = 0;
+	}
+
+	trip_pt_cdev_t(const trip_pt_cdev_t& x) = default;
+
+	~trip_pt_cdev_t() { }
+
+	trip_pt_cdev_t& operator=(const trip_pt_cdev_t& x) = default;
+
+    bool operator > (const trip_pt_cdev_t& other) const {
+        return influence > other.influence;
+    }
+
+    bool operator < (const trip_pt_cdev_t& other) const {
+        return influence < other.influence;
+    }
+
+} ;
 
 #define DEFAULT_SENSOR_ID	0xFFFF
 
 static bool trip_cdev_sort(trip_pt_cdev_t &cdev1, trip_pt_cdev_t &cdev2) {
 	return (cdev1.influence > cdev2.influence);
 }
-
 
 class cthd_trip_point {
 private:
@@ -103,8 +134,8 @@ private:
 	}
 
 public:
-	static const int default_influence = 0;
-	static const int consecutive_critical_events = 4;
+	static constexpr int default_influence = 0;
+	static constexpr int consecutive_critical_events = 4;
 
 	cthd_trip_point(int _index, trip_point_type_t _type, unsigned int _temp,
 			unsigned int _hyst, int _zone_id, int _sensor_id,
@@ -115,7 +146,7 @@ public:
 	void thd_trip_point_add_cdev(cthd_cdev &cdev, int influence,
 			int sampling_period = 0, int target_state_valid = 0,
 			int target_state =
-			TRIP_PT_INVALID_TARGET_STATE, pid_param_t *pid_param = NULL,
+			TRIP_PT_INVALID_TARGET_STATE, pid_param_t *pid_param = nullptr,
 			int min_max_valid = 0, int min_state = 0, int max_state = 0);
 
 	void delete_cdevs() {
@@ -136,7 +167,7 @@ public:
 	trip_point_type_t get_trip_type() {
 		return type;
 	}
-	unsigned int get_trip_temp() {
+	unsigned int get_trip_temp() const {
 		return temp;
 	}
 	unsigned int get_trip_hyst() {
@@ -197,12 +228,12 @@ public:
 
 	cthd_cdev* get_first_cdev() {
 		if (!cdevs.size())
-			return NULL;
+			return nullptr;
 
 		return cdevs[0].cdev;
 	}
 
-	void set_dependency(std::string cdev, std::string state_str);
+	void set_dependency(const std::string& cdev, const std::string& state_str);
 
 #ifndef ANDROID
 	trip_pt_cdev_t &get_cdev_at_index(unsigned int index) {
@@ -271,8 +302,4 @@ public:
 		}
 	}
 };
-
-static inline bool trip_sort(cthd_trip_point trip1, cthd_trip_point trip2) {
-	return (trip1.get_trip_temp() < trip2.get_trip_temp());
-}
 #endif

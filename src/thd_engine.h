@@ -25,6 +25,8 @@
 #ifndef THD_ENGINE_H_
 #define THD_ENGINE_H_
 
+#include <memory>
+#include <mutex>
 #include <pthread.h>
 #include <poll.h>
 #include <time.h>
@@ -38,11 +40,12 @@
 #include "thd_parse.h"
 #include "thd_kobj_uevent.h"
 #include "thd_rapl_power_meter.h"
+#include "thd_features_parse.h"
 
 #define MAX_MSG_SIZE 		512
 #define THD_NUM_OF_POLL_FDS	10
 
-typedef enum {
+typedef enum : uint8_t {
 	WAKEUP,
 	TERMINATE,
 	PREF_CHANGED,
@@ -56,7 +59,7 @@ typedef enum {
 
 // This defines whether the thermal control is entirely done by
 // this daemon or it just complements, what is done in kernel
-typedef enum {
+typedef enum : uint8_t {
 	COMPLEMENTRY, EXCLUSIVE,
 } control_mode_t;
 
@@ -66,17 +69,12 @@ typedef struct {
 	unsigned long msg[MAX_MSG_SIZE];
 } message_capsul_t;
 
-typedef struct {
-	unsigned int family;
-	unsigned int model;
-} supported_ids_t;
-
 class cthd_engine {
 
 protected:
-	std::vector<cthd_zone *> zones;
-	std::vector<cthd_sensor *> sensors;
-	std::vector<cthd_cdev *> cdevs;
+	std::vector<std::unique_ptr<cthd_zone>> zones;
+	std::vector<std::unique_ptr<cthd_sensor>> sensors;
+	std::vector<std::unique_ptr<cthd_cdev>> cdevs;
 	int current_cdev_index;
 	int current_zone_index;
 	int current_sensor_index;
@@ -99,7 +97,6 @@ private:
 	time_t thz_last_temp_ind_time;
 	time_t thz_last_update_event_time;
 	bool terminate;
-	int genuine_intel;
 	int has_invariant_tsc;
 	int has_aperf;
 	bool proc_list_matched;
@@ -113,10 +110,10 @@ private:
 	pthread_t thd_engine;
 	pthread_attr_t thd_attr;
 
-	pthread_mutex_t thd_engine_mutex;
+	std::mutex thd_engine_mutex;
 
 	std::vector<std::string> zone_preferences;
-	static const int thz_notify_debounce_interval = 3;
+	static constexpr int thz_notify_debounce_interval = 3;
 
 	struct pollfd poll_fds[THD_NUM_OF_POLL_FDS];
 	int poll_fd_cnt;
@@ -131,12 +128,14 @@ private:
 	void check_for_rt_kernel();
 
 public:
-	static const int max_thermal_zones = 10;
-	static const int max_cool_devs = 50;
-	static const int def_poll_interval = 4000;
-	static const int soft_cdev_start_index = 100;
+	static constexpr int max_thermal_zones = 10;
+	static constexpr int max_cool_devs = 50;
+	static constexpr int def_poll_interval = 4000;
+	static constexpr int soft_cdev_start_index = 100;
 
 	cthd_parse parser;
+	cthd_features_parse features_parser;
+
 	cthd_rapl_power_meter rapl_power_meter;
 
 	cthd_engine(std::string _uuid);
@@ -147,9 +146,11 @@ public:
 	control_mode_t get_control_mode() {
 		return control_mode;
 	}
+
 	void thd_engine_thread();
 	virtual int thd_engine_init(bool ignore_cpuid_check, bool adaptive = false);
 	virtual int thd_engine_start();
+	void thd_parse_features();
 	int thd_engine_stop();
 	int check_cpu_id();
 
@@ -202,7 +203,7 @@ public:
 		return parse_thermal_cdev_success;
 	}
 
-	static const int max_cpu_count = 64;
+	static constexpr int max_cpu_count = 64;
 
 	time_t last_cpu_update[max_cpu_count];
 	virtual bool apply_cpu_operation(int cpu) {
@@ -233,16 +234,17 @@ public:
 	std::string get_config_file() {
 		return config_file;
 	}
-	virtual ppcc_t *get_ppcc_param(std::string name);
-	virtual int search_idsp(std::string name) {
+	virtual ppcc_t *get_ppcc_param(const std::string& name);
+	virtual int search_idsp(const std::string& name) {
 		return THD_ERROR;
 	}
-	cthd_zone *search_zone(std::string name);
-	cthd_cdev *search_cdev(std::string name);
-	cthd_sensor *search_sensor(std::string name);
+	cthd_zone *search_zone(const std::string& name);
+	cthd_cdev *search_cdev(const std::string& name);
+	cthd_cdev *match_cdev(const std::string& name);
+	cthd_sensor *search_sensor(const std::string& name);
 	cthd_sensor *get_sensor(int index);
 	cthd_zone *get_zone(int index);
-	cthd_zone *get_zone(std::string type);
+	cthd_zone *get_zone(const std::string& type);
 	int get_sensor_temperature(int index, unsigned int *temperature);
 
 	unsigned int get_sensor_count() {
@@ -257,8 +259,8 @@ public:
 		return cdevs.size();
 	}
 
-	void add_zone(cthd_zone *zone) {
-		zones.push_back(zone);
+	void add_zone(std::unique_ptr<cthd_zone> zone) {
+		zones.push_back(std::move(zone));
 	}
 
 	bool rt_kernel_status() {
@@ -268,6 +270,14 @@ public:
 	virtual void workarounds() {
 	}
 
+	void thd_engine_lock() {
+		thd_engine_mutex.lock();
+	}
+
+	void thd_engine_unlock() {
+		thd_engine_mutex.unlock();
+	}
+
 	// User/External messages
 	int user_add_sensor(std::string name, std::string path);
 	cthd_sensor *user_get_sensor(unsigned int index);
@@ -275,21 +285,31 @@ public:
 	int user_add_virtual_sensor(std::string name, std::string dep_sensor,
 			double slope, double intercept);
 
-	int user_set_psv_temp(std::string name, unsigned int temp);
-	int user_set_max_temp(std::string name, unsigned int temp);
+	int user_set_psv_temp(const std::string& name, unsigned int temp);
+	int user_set_max_temp(const std::string& name, unsigned int temp);
 	int user_add_zone(std::string zone_name, unsigned int trip_temp,
 			std::string sensor_name, std::string cdev_name);
-	int user_set_zone_status(std::string name, int status);
-	int user_get_zone_status(std::string name, int *status);
-	int user_delete_zone(std::string name);
+	int user_set_zone_status(const std::string& name, int status);
+	int user_get_zone_status(const std::string& name, int *status);
+	int user_delete_zone(const std::string& name);
 
 	int user_add_cdev(std::string cdev_name, std::string cdev_path,
 			int min_state, int max_state, int step);
 	cthd_cdev *user_get_cdev(unsigned int index);
 
+	void enable_power_floor_event();
 	int parser_init();
 	void parser_deinit();
 	int debug_mode_on(void);
+
+	int check_acpi_platform_profile();
+
+	int check_feature(thermald_feature_names_t feature) {
+		if (feature >= MAX_FEATURE) {
+			return THD_ERROR;
+		}
+		return features_parser.feature_list[feature];
+	}
 };
 
 #endif /* THD_ENGINE_H_ */

@@ -1,7 +1,7 @@
 AC_PREREQ(1.0)
 
 m4_define([td_major_version], [2])
-m4_define([td_minor_version], [5.8])
+m4_define([td_minor_version], [5.11])
 m4_define([td_version],
           [td_major_version.td_minor_version])
 
@@ -24,14 +24,6 @@ else
     DBUS_SYS_DIR="/usr/share/dbus-1/system.d"
 fi
 AC_SUBST(DBUS_SYS_DIR)
-
-AC_ARG_WITH(dbus-power-group, AS_HELP_STRING([--with-dbus-power-group=GROUP], [group that is allowed to connect to D-BUS service]))
-if test -n "$with_dbus_power_group" ; then
-    DBUS_POWER_GROUP="$with_dbus_power_group"
-else
-    DBUS_POWER_GROUP="power"
-fi
-AC_SUBST(DBUS_POWER_GROUP)
 
 # paths
 AC_SUBST(tdbinary, "$sbindir/$PACKAGE", [Binary executable])
@@ -106,9 +98,9 @@ for flag in \
                           [CXXFLAGS="$CXXFLAGS ${flag}"])
 done
 
-# Check for c++0x support.
-AX_CHECK_COMPILE_FLAG([-std=c++0x],
-                      [CXXFLAGS="$CXXFLAGS -std=c++0x"])
+# Check for c++11 support.
+AX_CHECK_COMPILE_FLAG([-std=c++11],
+                      [CXXFLAGS="$CXXFLAGS -std=c++11"])
 ], [AC_MSG_ERROR([AX_CHECK_COMPILE_FLAG not found, you'll need to install autoconf-archive])])
 
 AC_ARG_ENABLE(werror, AS_HELP_STRING([--disable-werror], [Disable -Werror]))

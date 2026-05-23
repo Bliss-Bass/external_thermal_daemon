@@ -67,31 +67,17 @@ private:
 	int rapl_read_enable_status();
 
 public:
-	static const int rapl_no_time_windows = 6;
-	static const long def_rapl_time_window = 1000000; // micro seconds
-	static const int rapl_min_default_step = 500000; //0.5W
-	static const int rapl_max_sane_phy_max = 100000000; // Some sane very high value in uW
+	static constexpr int rapl_no_time_windows = 6;
+	static constexpr long def_rapl_time_window = 1000000; // micro seconds
+	static constexpr int rapl_min_default_step = 500000; //0.5W
+	static constexpr int rapl_max_sane_phy_max = 1000000000; // Sane upper bound in uW (1000W)
 
-	static const int rapl_low_limit_percent = 50;
-	static const int rapl_power_dec_percent = 5;
+	static constexpr int rapl_low_limit_percent = 50;
+	static constexpr int rapl_power_dec_percent = 5;
 
 	cthd_sysfs_cdev_rapl(unsigned int _index, int package) :
-			cthd_cdev(_index,
-					"/sys/devices/virtual/powercap/intel-rapl/intel-rapl:0/"), phy_max(
-					0), package_id(package), constraint_index(
-					0), pl2_index(-1), dynamic_phy_max_enable(
-					false), pl0_max_pwr(0), pl0_min_pwr(0), pl0_min_window(
-					0), pl0_max_window(0), pl0_step_pwr(
-					0), bios_locked(false), constrained(
-					false), power_on_constraint_0_pwr(0), power_on_constraint_0_time_window(
-					0), power_on_enable_status(0), device_name("TCPU.D0")
+            cthd_sysfs_cdev_rapl(_index, package, "/sys/devices/virtual/powercap/intel-rapl/intel-rapl:0/")
 	{
-		pl1_max_pwr = 0;
-		pl1_min_pwr = 0;
-		pl1_min_window = 0;
-		pl1_max_window = 0;
-		pl1_step_pwr = 0;
-		pl1_valid = 0;
 	}
 	cthd_sysfs_cdev_rapl(unsigned int _index, int package,
 			std::string contol_path) :
@@ -113,16 +99,16 @@ public:
 		pl1_valid = 0;
 	}
 
-	virtual void set_curr_state(int state, int arg);
-	virtual int get_curr_state();
-	virtual int get_curr_state(bool read_again);
-	virtual int get_max_state();
-	virtual int update();
-	virtual void set_curr_state_raw(int state, int arg);
+	void set_curr_state(int state, int arg) override;
+	int get_curr_state() override;
+	int get_curr_state(bool read_again) override;
+	int get_max_state() override;
+	int update() override;
+	void set_curr_state_raw(int state, int arg) override;
 	void set_tcc(int tcc);
-	void set_adaptive_target(struct adaptive_target &target);
-	void thd_cdev_set_min_state_param(int arg);
-	int get_phy_max_state() {
+	void set_adaptive_target(struct adaptive_target &target) override;
+	void thd_cdev_set_min_state_param(int arg) override;
+	int get_phy_max_state() override {
 		return phy_max;
 	}
 	int rapl_update_enable_status(int enable);

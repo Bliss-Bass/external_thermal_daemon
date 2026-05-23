@@ -27,9 +27,10 @@
 
 #include "thd_common.h"
 #include "thd_sys_fs.h"
+#include <cstdint>
 #include <vector>
 
-typedef enum {
+typedef enum : uint8_t {
 	INVALID = 0, PACKAGE = 0x01, DRAM = 0x02, CORE = 0x04, UNCORE = 0x08
 } domain_type;
 
@@ -60,7 +61,7 @@ private:
 	bool enable_measurement;
 
 public:
-	static const int rapl_callback_timeout = 10; //seconds
+	static constexpr int rapl_callback_timeout = 10; //seconds
 	cthd_rapl_power_meter(unsigned int mask = PACKAGE | DRAM);
 
 	void rapl_read_domains(const char *base_path);
@@ -76,6 +77,7 @@ public:
 
 	// return in micro units to be compatible with kernel ABI
 	unsigned long long rapl_action_get_energy(domain_type type);
+	unsigned int rapl_action_get_last_power(domain_type type);
 	unsigned int rapl_action_get_power(domain_type type);
 	unsigned int rapl_action_get_power(domain_type type,
 			unsigned int *max_power, unsigned int *min_power);

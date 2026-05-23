@@ -11,14 +11,6 @@ Prerequisites:
 			Intel INT340X drivers
 			Intel RAPL-mmio power capping driver: Available from 5.3-rc1
 
-Companion tools
-	ThermalMonitor
-		Graphical front end for monitoring and control.
-		Source code is as part of tools folder in this git repository.
-	dptfxtract
-		Download from: https://github.com/intel/dptfxtract
-		This generates configuration files for thermald on some systems.
-
 Building and executing on Fedora
 1.
 Install
@@ -54,6 +46,8 @@ add appropriate prefix.
 	sudo systemctl status thermald.service
 - Stop service
 	sudo systemctl stop thermald.service
+- To enable service at boot
+	sudo systemctl enable thermald.service
 
 4. Terminate using DBUS I/F
 	sudo test/test_pref.sh
@@ -108,6 +102,24 @@ For build, follow the same procedure as Fedora.
 -------------------------------------------
 
 Releases
+
+Release 2.5.11
+- Clang-tidy fixes
+- Wildcat Lake support
+- CVE related to symbolic links exploitations
+- dbus interface fixes and remove power group after Thermal monitor
+support is deprecated
+
+Release 2.5.10
+- For new ITMT string version 3 support
+- There was issue in updating path for DPTF files for Panther Lake
+- Minor print format for time_t value
+- Don't reset clamping bit for RAPL for MSR rapl zones when disabled
+- Add confitional power floor processing
+
+Release 2.5.9
+- Panther Lake support
+- Intel P-state in passive mode support
 
 Release 2.5.8
 - Lunar Lake support

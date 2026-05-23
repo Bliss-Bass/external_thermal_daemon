@@ -58,7 +58,7 @@ extern int thd_dbus_server_init(gboolean (*exit_handler)(void));
 
 // Lock file
 static int lock_file_handle = -1;
-static const char *lock_file = TDRUNDIR "/thermald.pid";
+static constexpr char lock_file[] = TDRUNDIR "/thermald.pid";
 
 // Default log level
 static int thd_log_level = G_LOG_LEVEL_ERROR | G_LOG_LEVEL_CRITICAL
@@ -78,6 +78,7 @@ bool thd_ignore_default_control = false;
 bool workaround_enabled = false;
 bool disable_active_power = false;
 bool ignore_critical = false;
+bool power_floor_enable = false;
 
 // check cpuid
 static gboolean ignore_cpuid_check = false;
@@ -128,7 +129,7 @@ void thd_logger(const gchar *log_domain, GLogLevelFlags log_level,
 		break;
 	}
 
-	seconds = time(NULL);
+	seconds = time(nullptr);
 
 	if (use_syslog)
 		syslog(syslog_priority, "%s", message);
@@ -146,7 +147,7 @@ void clean_up_lockfile(void) {
 
 bool check_thermald_running() {
 
-	lock_file_handle = open(lock_file, O_RDWR | O_CREAT, 0600);
+	lock_file_handle = open(lock_file, O_RDWR | O_CREAT | O_NOFOLLOW, 0600);
 	if (lock_file_handle == -1) {
 		/* Couldn't open lock file */
 		thd_log_error("Could not open PID lock file %s, exiting\n", lock_file);
@@ -170,24 +171,25 @@ gboolean sig_int_handler(void) {
 	sleep(1);
 	if (g_main_loop)
 		g_main_loop_quit(g_main_loop);
-	delete thd_engine;
+	thd_engine.reset();
 	clean_up_lockfile();
 	exit(EXIT_SUCCESS);
 
 	return FALSE;
 }
 
+gboolean log_debug = FALSE;
+
 // main function
 int main(int argc, char *argv[]) {
 	gboolean show_version = FALSE;
 	gboolean log_info = FALSE;
-	gboolean log_debug = FALSE;
 	gboolean no_daemon = FALSE;
 	gboolean systemd = FALSE;
 	gboolean test_mode = FALSE;
 	gboolean adaptive = FALSE;
 	gboolean ignore_default_control = FALSE;
-	gchar *conf_file = NULL;
+	gchar *conf_file = nullptr;
 	gint poll_interval = -1;
 	gboolean success;
 	GOptionContext *opt_ctx;
@@ -199,45 +201,46 @@ int main(int argc, char *argv[]) {
 
 	GOptionEntry options[] = {
 			{ "version", 0, 0, G_OPTION_ARG_NONE,
-					&show_version, N_("Print thermald version and exit"), NULL },
+					&show_version, N_("Print thermald version and exit"), nullptr },
 			{ "no-daemon", 0, 0, G_OPTION_ARG_NONE, &no_daemon, N_(
-					"Don't become a daemon: Default is daemon mode"), NULL },
+					"Don't become a daemon: Default is daemon mode"), nullptr },
 			{ "systemd", 0, 0, G_OPTION_ARG_NONE, &systemd, N_(
-					"Assume daemon is started by systemd"), NULL },
+					"Assume daemon is started by systemd"), nullptr },
 			{ "loglevel=info", 0, 0, G_OPTION_ARG_NONE, &log_info, N_(
-					"log severity: info level and up"), NULL },
+					"log severity: info level and up"), nullptr },
 			{ "loglevel=debug", 0, 0, G_OPTION_ARG_NONE, &log_debug, N_(
-					"log severity: debug level and up: Max logging"), NULL },
-			{ "test-mode", 0, 0, G_OPTION_ARG_NONE, &test_mode, N_(
-					"Test Mode only: Allow non root user"), NULL },
+					"log severity: debug level and up: Max logging"), nullptr },
 			{ "adaptive", 0, 0, G_OPTION_ARG_NONE, &adaptive, N_(
-					"adaptive mode: use adaptive performance tables if available"), NULL },
+					"adaptive mode: use adaptive performance tables if available"), nullptr },
 			{ "poll-interval", 0, 0, G_OPTION_ARG_INT, &poll_interval,
 					N_("Poll interval in seconds: Poll for zone temperature changes. "
-						"If want to disable polling set to zero."), NULL },
+						"If want to disable polling set to zero."), nullptr },
 			{ "dbus-enable", 0, 0, G_OPTION_ARG_NONE, &dbus_enable, N_(
-					"Enable Dbus."), NULL }, { "exclusive-control", 0, 0,
+					"Enable Dbus."), nullptr }, { "exclusive-control", 0, 0,
 							G_OPTION_ARG_NONE, &exclusive_control, N_(
 							"Take over thermal control from kernel thermal driver."),
-								NULL },
+								nullptr },
 			{ "ignore-cpuid-check", 0, 0, G_OPTION_ARG_NONE,
-					&ignore_cpuid_check, N_("Ignore CPU ID check."), NULL },
+					&ignore_cpuid_check, N_("Ignore CPU ID check."), nullptr },
 			{ "config-file", 0, 0, G_OPTION_ARG_STRING, &conf_file, N_(
-					"configuration file"), NULL },
+					"configuration file"), nullptr },
 			{ "ignore-default-control", 0, 0, G_OPTION_ARG_NONE, &ignore_default_control, N_(
 							"Ignore default CPU temperature control. "
-							"Strictly follow thermal-conf.xml"), NULL },
+							"Strictly follow thermal-conf.xml"), nullptr },
 			{ "workaround-enabled", 0, 0, G_OPTION_ARG_NONE,
 						&workaround_enabled, N_(
-						"Enable workarounds for power"), NULL },
+						"Enable workarounds for power"), nullptr },
 			{ "disable-active-power", 0, 0, G_OPTION_ARG_NONE,
 						&disable_active_power, N_(
-						"Disable active power settings to reduce thermal impact"), NULL },
+						"Disable active power settings to reduce thermal impact"), nullptr },
 			{ "ignore-critical-trip", 0, 0, G_OPTION_ARG_NONE,
 						&ignore_critical, N_(
-						"Ignore critical trips for reboot"), NULL },
-			{ NULL, 0, 0,
-					G_OPTION_ARG_NONE, NULL, NULL, NULL } };
+						"Ignore critical trips for reboot"), nullptr },
+			{ "power-floor-enable", 0, 0, G_OPTION_ARG_NONE,
+						&power_floor_enable, N_(
+						"Handle power floor event"), nullptr },
+			{ nullptr, 0, 0,
+					G_OPTION_ARG_NONE, nullptr, nullptr, nullptr } };
 
 	if (!g_module_supported()) {
 		fprintf(stderr, "GModules are not supported on your platform!\n");
@@ -251,11 +254,11 @@ int main(int argc, char *argv[]) {
 	bind_textdomain_codeset(GETTEXT_PACKAGE, "UTF-8");
 	textdomain(GETTEXT_PACKAGE);
 	/* Parse options */
-	opt_ctx = g_option_context_new(NULL);
+	opt_ctx = g_option_context_new(nullptr);
 	g_option_context_set_translation_domain(opt_ctx, GETTEXT_PACKAGE);
 	g_option_context_set_ignore_unknown_options(opt_ctx, FALSE);
 	g_option_context_set_help_enabled(opt_ctx, TRUE);
-	g_option_context_add_main_entries(opt_ctx, options, NULL);
+	g_option_context_add_main_entries(opt_ctx, options, nullptr);
 
 	g_option_context_set_summary(opt_ctx,
 
@@ -266,7 +269,7 @@ int main(int argc, char *argv[]) {
 	"This work is licensed under GPL v2.\n"
 	"Refer to https://github.com/intel/thermal_daemon/blob/master/COPYING.");
 
-	success = g_option_context_parse(opt_ctx, &argc, &argv, NULL);
+	success = g_option_context_parse(opt_ctx, &argc, &argv, nullptr);
 	g_option_context_free(opt_ctx);
 
 	if (!success) {
@@ -281,7 +284,7 @@ int main(int argc, char *argv[]) {
 		exit(EXIT_SUCCESS);
 	}
 
-	if (getuid() != 0 && !test_mode) {
+	if (getuid() != 0) {
 		fprintf(stderr, "You must be root to run thermald!\n");
 		exit(EXIT_FAILURE);
 	}
@@ -312,7 +315,7 @@ int main(int argc, char *argv[]) {
 	//setlogmask(LOG_CRIT | LOG_ERR | LOG_WARNING | LOG_NOTICE | LOG_DEBUG | LOG_INFO);
 	thd_daemonize = !no_daemon && !systemd;
 	use_syslog = !no_daemon || systemd;
-	g_log_set_handler(NULL, G_LOG_LEVEL_MASK, thd_logger, NULL);
+	g_log_set_handler(nullptr, G_LOG_LEVEL_MASK, thd_logger, nullptr);
 
 	if (check_thermald_running()) {
 		thd_log_error(
@@ -321,13 +324,13 @@ int main(int argc, char *argv[]) {
 	}
 
 	if (!thd_daemonize) {
-		g_unix_signal_add (SIGINT, G_SOURCE_FUNC (sig_int_handler), NULL);
-		g_unix_signal_add (SIGTERM, G_SOURCE_FUNC (sig_int_handler), NULL);
+		g_unix_signal_add (SIGINT, G_SOURCE_FUNC (sig_int_handler), nullptr);
+		g_unix_signal_add (SIGTERM, G_SOURCE_FUNC (sig_int_handler), nullptr);
 	}
 
 	// Create a main loop that will dispatch callbacks
-	g_main_loop = g_main_loop_new(NULL, FALSE);
-	if (g_main_loop == NULL) {
+	g_main_loop = g_main_loop_new(nullptr, FALSE);
+	if (g_main_loop == nullptr) {
 		clean_up_lockfile();
 		thd_log_error("Couldn't create GMainLoop:\n");
 		return THD_FATAL_ERROR;
