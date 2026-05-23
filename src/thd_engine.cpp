@@ -236,8 +236,22 @@ void cthd_engine::enable_power_floor_event()
 }
 
 int cthd_engine::check_acpi_platform_profile() {
-	// Check PM profile and fail to start for non mobile platforms
 	csys_fs pm_profile_fs("/sys/firmware/acpi/pm_profile");
+
+#ifdef ANDROID
+	// Desktop-class x86 Android may report Desktop (1) or Workstation (3)
+	// PM profiles. Log the value but do not reject non-mobile platforms.
+	if (pm_profile_fs.exists()) {
+		std::string pm_profile;
+		pm_profile_fs.read("", pm_profile);
+		thd_log_info("PM profile is %s (Android: not restricting)\n",
+				pm_profile.c_str());
+	} else {
+		thd_log_info("PM profile is not available, skipping check\n");
+	}
+	return THD_SUCCESS;
+#else
+	// Check PM profile and fail to start for non mobile platforms
 	if (pm_profile_fs.exists()) {
 		std::string pm_profile;
 		pm_profile_fs.read("", pm_profile);
@@ -251,6 +265,7 @@ int cthd_engine::check_acpi_platform_profile() {
 	}
 
 	return THD_SUCCESS;
+#endif
 }
 
 void cthd_engine::thd_parse_features()
