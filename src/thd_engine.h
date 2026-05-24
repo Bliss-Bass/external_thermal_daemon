@@ -308,6 +308,9 @@ public:
 		if (feature >= MAX_FEATURE) {
 			return THD_ERROR;
 		}
+		if (features_parser.feature_list.size() <= feature) {
+			return 1;
+		}
 		return features_parser.feature_list[feature];
 	}
 };

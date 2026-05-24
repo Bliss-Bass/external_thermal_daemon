@@ -51,6 +51,7 @@ cthd_features_parse::cthd_features_parse() :
 		doc(nullptr), root_element(nullptr) {
 	std::string name = TDCONFDIR;
 	filename = name + "/" "thermald-features.xml";
+	feature_list.assign(MAX_FEATURE, 1);
 }
 
 int cthd_features_parse::parser_init() {
@@ -59,12 +60,13 @@ int cthd_features_parse::parser_init() {
 	struct stat file_stat;
 
 	if (stat(filename.c_str(), &file_stat) == -1) {
-		thd_log_info("Could not get file status for %s\n", filename.c_str());
+		thd_log_info("Could not get file status for %s, using default features\n",
+				filename.c_str());
 		return THD_ERROR;
 	}
 
+#ifndef ANDROID
 	// Make sure file is owned by root and not writable by group/others
-
 	if (file_stat.st_uid != 0) {
 		thd_log_info("Config file %s is not owned by root\n", filename.c_str());
 		return THD_ERROR;
@@ -74,6 +76,7 @@ int cthd_features_parse::parser_init() {
 		thd_log_info("File %s is group, other writable\n", filename.c_str());
 		return THD_ERROR;
 	}
+#endif
 
 	// Check if file is not a symbolic link
 
