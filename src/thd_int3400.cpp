@@ -24,6 +24,7 @@
 
 #include "thd_int3400.h"
 #include "thd_cdev_gen_sysfs.h"
+#include <dirent.h>
 #include <iostream>
 #include <fstream>
 #include <iostream>
