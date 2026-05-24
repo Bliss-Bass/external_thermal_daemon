@@ -188,7 +188,7 @@ int csys_fs::read(const std::string &path, std::string &buf) {
 #ifndef ANDROID
 	try {
 #endif
-		int ret = check_non_symbolic_path(p);
+		ret = check_non_symbolic_path(p);
 		if (ret == THD_ERROR) {
 			thd_log_info("sysfs read failed [path is symbolic link] %s\n", p.c_str());
 			return -EINVAL;
