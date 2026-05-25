@@ -1,0 +1,44 @@
+<?xml version="1.0"?>
+<!--
+  Android desktop-class x86/x86_64 thermal policy for thermald.
+
+  Installed to /vendor/etc/thermal-daemon/thermal-conf.xml by Android.mk.
+  Start thermald with:
+    --config-file /vendor/etc/thermal-daemon/thermal-conf.xml
+
+  ProductName wildcard avoids needing DMI reads (often blocked by SELinux).
+  The cpu zone augments the auto-discovered coretemp zone; passive throttling
+  starts at 85 C unless changed below.
+-->
+<ThermalConfiguration>
+  <Platform>
+    <Name>Android Desktop x86</Name>
+    <ProductName>*</ProductName>
+    <Preference>QUIET</Preference>
+    <ThermalZones>
+      <ThermalZone>
+        <Type>cpu</Type>
+        <TripPoints>
+          <TripPoint>
+            <SensorType>temp1_input</SensorType>
+            <Temperature>85000</Temperature>
+            <type>passive</type>
+            <ControlType>SEQUENTIAL</ControlType>
+            <CoolingDevice>
+              <type>intel_pstate</type>
+              <influence>100</influence>
+            </CoolingDevice>
+            <CoolingDevice>
+              <type>rapl_controller</type>
+              <influence>100</influence>
+            </CoolingDevice>
+            <CoolingDevice>
+              <type>intel_powerclamp</type>
+              <influence>100</influence>
+            </CoolingDevice>
+          </TripPoint>
+        </TripPoints>
+      </ThermalZone>
+    </ThermalZones>
+  </Platform>
+</ThermalConfiguration>

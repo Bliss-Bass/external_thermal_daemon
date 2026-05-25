@@ -66,3 +66,33 @@ LOCAL_SHARED_LIBRARIES := liblog libcutils libdl libc++ libutils
 LOCAL_PRELINK_MODULE := false
 LOCAL_MODULE := thermal-daemon
 include $(BUILD_EXECUTABLE)
+
+# Vendor config files for thermald
+ETC_DIR := $(TARGET_OUT_VENDOR)/etc/thermal-daemon
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := thermald-features.xml
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_PATH := $(ETC_DIR)
+LOCAL_SRC_FILES := data/thermald-features.xml
+LOCAL_PROPRIETARY_MODULE := true
+include $(BUILD_PREBUILT)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := thermal-cpu-cdev-order.xml
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_PATH := $(ETC_DIR)
+LOCAL_SRC_FILES := data/thermal-cpu-cdev-order.xml
+LOCAL_PROPRIETARY_MODULE := true
+include $(BUILD_PREBUILT)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := thermal-conf.xml
+LOCAL_MODULE_CLASS := ETC
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_PATH := $(ETC_DIR)
+LOCAL_SRC_FILES := data/thermal-conf.android.xml
+LOCAL_PROPRIETARY_MODULE := true
+include $(BUILD_PREBUILT)
