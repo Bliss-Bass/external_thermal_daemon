@@ -1,4 +1,11 @@
-Android Integration
+Android Integration (OUT OF DATE)
+
+See ANDROID.md in the repository root for current Android integration.
+The Android binary does not include D-Bus support.
+
+---
+
+Legacy note (desktop thermald + D-Bus — not applicable to Android.mk build):
 
 Thermald required dbus daemon.
 
@@ -20,5 +27,3 @@ service thermald /system/bin/thermald --dbus-enable
 
 By default it is disabled. So need explicit command somewhere:
 "start thermald"
-
-

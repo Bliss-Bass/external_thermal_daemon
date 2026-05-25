@@ -2,6 +2,10 @@ Use man pages to check command line arguments in configuration:
 	man thermald
 	man thermal-conf.xml
 
+Android integration and testing:
+	ANDROID.md
+	TESTING.md
+
 Prerequisites:
 	Kernel
 		Prefers kernel with
